@@ -1,53 +1,26 @@
 <?php
 class Panorama {
+    const MIN_WIDTH = 16;
+    const MAX_WIDTH = 640;
+
+    const MIN_HEIGHT = 16;
+    const MAX_HEIGHT = 640;
+
+    const MIN_YAW = -180;
+    const MAX_YAW = 180;
+
+    const MIN_PITCH = -90;
+    const MAX_PITCH = 90;
 
     function __construct($fullFilePath) {
         $this->fullFilePath = $fullFilePath;
         $this->originalImage = new Imagick($fullFilePath);
     }
 
-    function crop(Array $attributes = [], String $outputFilePath) {
-        $attributes = array_replace_recursive([
-            'width' => 600,
-            'height' => 600,
-            'yaw' => 0,
-            'pitch' => 0,
-            'roll' => 0,
-            'fov' => 90,
-            'file_type' => 'jpg'
-        ], $attributes);
-        extract($attributes);
-
-        function enforceParameterLimits($value, $min, $max) {
-            $value = min($value, $max);
-            $value = max($value, $min);
-            return $value;
-        }
-        $yaw = enforceParameterLimits($yaw, -180, 180);
-        $pitch = enforceParameterLimits($pitch, -90, 90);
-        $roll = enforceParameterLimits($roll, -180, 180);
-        $fov = enforceParameterLimits($fov, 10, 120);
-        $mime = in_array($mime, ['jpg', 'webp']) ? $mime : 'jpg';
-
-        // recalibrate parameters for computation
-        $pitch = enforceParameterLimits(-($pitch - 90), 0, 179);
-        $yaw = enforceParameterLimits((90 - $yaw), -180, 180);
-        $tempWidth = $width;
-        $tempHeight = $height;
-        if($roll != 0) {
-            if(($roll % 90) == 0) {
-                $tempWidth = $tempHeight = max($width, $height);
-            } else {
-                $rollRad = deg2rad($roll);
-                $tempHeight = round(abs($width * sin($rollRad)) + abs($height * cos($rollRad)));
-                $tempWidth = round(abs($width * cos($rollRad)) + abs($height * sin($rollRad)));
-            }
-        }
-
+    private function createOuterImage($width, $height, $yaw, $pitch, $fov) {
         $sourceHeight = $this->originalImage->getImageHeight();
         $sourceWidth = $this->originalImage->getImageWidth();
-        $sourcePixels = $this->originalImage->exportImagePixels(0, 0, $sourceWidth, $sourceHeight, "RGB", Imagick::PIXEL_CHAR);
-
+        
         $ratioUp = 2 * tan(deg2rad($fov) / 2);
         $ratioRight = $ratioUp * (($sourceWidth / $sourceHeight) / 2);
 
@@ -73,10 +46,11 @@ class Panorama {
         $camPlaneOriginZ = $camDirZ + ($camUpZ / 2) - ($camRightZ / 2);
 
         $outputPixels = [];
-        for($i = 0; $i < $tempHeight; $i++) {
-            for($j = 0; $j < $tempWidth; $j++) {
-                $fx = $j / $tempWidth;
-                $fy = $i / $tempHeight;
+        $sourcePixels = $this->originalImage->exportImagePixels(0, 0, $sourceWidth, $sourceHeight, "RGB", Imagick::PIXEL_CHAR);
+        for($i = 0; $i < $height; $i++) {
+            for($j = 0; $j < $width; $j++) {
+                $fx = $j / $width;
+                $fy = $i / $height;
                 
                 $rayX = $camPlaneOriginX + ($fx * $camRightX) - ($fy * $camUpX);
                 $rayY = $camPlaneOriginY + ($fx * $camRightY) - ($fy * $camUpY);
@@ -86,7 +60,7 @@ class Panorama {
                 $theta = floor(($sourceHeight / M_PI) * acos($rayY * $rayNorm));
                 $phi = floor((($sourceWidth / M_PI) / 2) * (atan2($rayZ, $rayX) + M_PI));
                 
-                $destOffset = 4 * (($i * $tempWidth) + $j);
+                $destOffset = 4 * (($i * $width) + $j);
                 $sourceOffset = 3 * (($theta * $sourceWidth) + $phi);
                 
                 $outputPixels[$destOffset] = $sourcePixels[$sourceOffset];
@@ -95,23 +69,63 @@ class Panorama {
             }
         }
 
-        try {
-            $finalWidth = $tempWidth;
-            $finalHeight = $tempHeight;
-            $imageMagickDest = new Imagick;
-            $imageMagickDest->newImage($finalWidth, $finalHeight, 'gray');    
-            $imageMagickDest->importImagePixels(0, 0, $finalWidth, $finalHeight, "RGB", Imagick::PIXEL_CHAR, $outputPixels);
-            if($roll != 0) {
-                $finalWidth = $width;
-                $finalHeight = $height;
-                $imageMagickDest->rotateImage(new ImagickPixel, $roll);
-                $imageMagickDest->cropImage($finalWidth, $finalHeight, ($tempWidth - $finalWidth) / 2, ($tempHeight - $finalHeight) / 2);
-            }
-            $imageMagickDest->setImageFormat($mime);
-            $imageMagickDest->setImageCompressionQuality($comp);
-            $imageMagickDest->writeImage($outputFilePath);
+        $imageMagick = new Imagick;
+        $imageMagick->newImage($width, $height, 'gray');    
+        $imageMagick->importImagePixels(0, 0, $width, $height, "RGB", Imagick::PIXEL_CHAR, $outputPixels);
+
+        $sourcePixels = [];
+        
+        return $imageMagick;
+    }
+
+    function crop(Array $attributes = [], bool $saveFile = false, String $outputFilePath = '') {
+        $attributes = array_replace_recursive([
+            'width' => self::MAX_WIDTH,
+            'height' => self::MAX_HEIGHT,
+            'yaw' => 0,
+            'pitch' => 0,
+            'roll' => 0,
+            'fov' => 90,
+            'fileType' => 'jpg',
+            'compressionRate' => 80,
+        ], $attributes);
+        extract($attributes);
+
+        function enforceParameterLimits($value, $min, $max) {
+            $value = min($value, $max);
+            $value = max($value, $min);
+            return $value;
+        }
+
+        $width = enforceParameterLimits($width, self::MIN_WIDTH, self::MAX_WIDTH);
+        $height = enforceParameterLimits($height, self::MIN_HEIGHT, self::MAX_HEIGHT);
+        $yaw = enforceParameterLimits($yaw, self::MIN_YAW, self::MAX_YAW);
+        $pitch = enforceParameterLimits($pitch, self::MIN_PITCH, self::MAX_PITCH);
+        $roll = enforceParameterLimits($roll, -180, 180);
+        $fov = enforceParameterLimits($fov, 10, 120);
+        $fileType = in_array($fileType, ['jpg', 'webp']) ? $fileType : 'jpg';
+
+        // recalibrate parameters for computation
+        $outerWidth = round((cos(deg2rad(45)) * self::MAX_WIDTH) * 2);
+        $outerHeight = round((cos(deg2rad(45)) * self::MAX_HEIGHT) * 2);
+        $pitch = enforceParameterLimits(-($pitch - 90), 0, 179);
+        $yaw = enforceParameterLimits((90 - $yaw), -180, 180);
+        $fov += 10;
+
+        $imageMagick = $this->createOuterImage($outerWidth, $outerHeight, $yaw, $pitch, $fov);
+
+        if($roll != 0) {
+            $imageMagick->rotateImage(new ImagickPixel, $roll);
+        }
+        $imageMagick->cropImage($width, $height, ($outerWidth - $width) / 2, ($outerHeight - $height) / 2);
+
+        $imageMagick->setImageFormat($fileType);
+        $imageMagick->setImageCompressionQuality($compressionRate);
+        if($saveFile) {
+            $imageMagick->writeImage($outputFilePath);
             return true;
-        } catch (Exception $e) { }
-        return false;
+        } else {
+            return $imageMagick;
+        }
     }
 }
