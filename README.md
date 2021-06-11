@@ -1,5 +1,5 @@
 # Panorama
-Process panorama images via PHP.
+Process panorama images via PHP + ImageMagick
 
 Current features: `crop`
 
