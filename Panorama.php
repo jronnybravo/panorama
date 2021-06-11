@@ -12,6 +12,12 @@ class Panorama {
     const MIN_PITCH = -90;
     const MAX_PITCH = 90;
 
+    const MIN_ROLL = -180;
+    const MAX_ROLL = 180;
+
+    const MIN_FOV = 10;
+    const MAX_FOV = 120;
+
     function __construct($fullFilePath) {
         $this->fullFilePath = $fullFilePath;
         $this->originalImage = new Imagick($fullFilePath);
@@ -101,16 +107,16 @@ class Panorama {
         $height = enforceParameterLimits($height, self::MIN_HEIGHT, self::MAX_HEIGHT);
         $yaw = enforceParameterLimits($yaw, self::MIN_YAW, self::MAX_YAW);
         $pitch = enforceParameterLimits($pitch, self::MIN_PITCH, self::MAX_PITCH);
-        $roll = enforceParameterLimits($roll, -180, 180);
-        $fov = enforceParameterLimits($fov, 10, 120);
+        $roll = enforceParameterLimits($roll, self::MIN_ROLL, SELF::MAX_ROLL);
+        $fov = enforceParameterLimits($fov, self::MIN_FOV, self::MAX_FOV);
         $fileType = in_array($fileType, ['jpg', 'webp']) ? $fileType : 'jpg';
 
         // recalibrate parameters for computation
         $outerWidth = round((cos(deg2rad(45)) * self::MAX_WIDTH) * 2);
         $outerHeight = round((cos(deg2rad(45)) * self::MAX_HEIGHT) * 2);
         $pitch = enforceParameterLimits(-($pitch - 90), 0, 179);
-        $yaw = enforceParameterLimits((90 - $yaw), -180, 180);
-        $fov += 10;
+        $yaw = enforceParameterLimits((90 - $yaw), self::MIN_YAW, self::MAX_YAW);
+        $fov += 14;
 
         $imageMagick = $this->createOuterImage($outerWidth, $outerHeight, $yaw, $pitch, $fov);
 
