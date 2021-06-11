@@ -16,7 +16,10 @@ $attributes = [
 ];
 
 $panorama = new Panorama($panoramaImageFilePath);
-$panorama->crop($attributes, $panoramaImageOutputFilePath);
+
+$savefile = true;
+$panoramaImageOutputFilePath = '(...).jpg';
+$panorama->crop($attributes, $saveFile, $panoramaImageOutputFilePath);
 ```
 
 ## License
