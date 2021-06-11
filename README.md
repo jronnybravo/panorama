@@ -1,5 +1,6 @@
 # Panorama
-Panorama Image PHP class
+Process panorama images via PHP.
+Current features: `crop`
 
 ## Usage
 ```php
