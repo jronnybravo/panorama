@@ -1,5 +1,6 @@
 # Panorama
 Process panorama images via PHP.
+
 Current features: `crop`
 
 ## Usage
