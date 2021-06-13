@@ -74,13 +74,12 @@ class Panorama {
                 $outputPixels[$destOffset + 2] = $sourcePixels[$sourceOffset + 2];
             }
         }
+        $sourcePixels = [];
 
         $imageMagick = new Imagick;
         $imageMagick->newImage($width, $height, 'gray');    
         $imageMagick->importImagePixels(0, 0, $width, $height, "RGB", Imagick::PIXEL_CHAR, $outputPixels);
 
-        $sourcePixels = [];
-        
         return $imageMagick;
     }
 
@@ -116,10 +115,9 @@ class Panorama {
         $outerHeight = round((cos(deg2rad(45)) * self::MAX_HEIGHT) * 2);
         $pitch = enforceParameterLimits(-($pitch - 90), 0, 179);
         $yaw = enforceParameterLimits((90 - $yaw), self::MIN_YAW, self::MAX_YAW);
-        $fov += 14;
+        $fov += ($outerWidth - self::MAX_WIDTH) / (M_PI * 4);
 
         $imageMagick = $this->createOuterImage($outerWidth, $outerHeight, $yaw, $pitch, $fov);
-
         if($roll != 0) {
             $imageMagick->rotateImage(new ImagickPixel, $roll);
         }
